@@ -736,7 +736,7 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
 		NSInteger statusCode = [((NSHTTPURLResponse *)response) statusCode];
         if (statusCode >= 400)
 		{
-			[self connection:connection didFailWithError:nil];
+			[self connection:connection didFailWithError:[NSError errorWithDomain:response.URL.host code:statusCode userInfo:nil]];
 		}
 	}
 }
@@ -780,7 +780,7 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
 	}
     else
     {
-        [self connection:connection didFailWithError:nil];
+        [self connection:connection didFailWithError:[NSError errorWithDomain:NSCocoaErrorDomain code:NSFileWriteUnknownError userInfo:nil]];
     }
 }
 
