@@ -163,6 +163,21 @@ typedef enum _DGImageLoaderViewLandscapeMode
     Default: DGImageLoaderViewLandscapeModeNone */
 @property (nonatomic, assign) DGImageLoaderViewLandscapeMode landscapeMode;
 
+/*! @property onImageSizeKnown
+ @brief When the size of an image is finally known (i.e. after loading from the web),
+ This is a chance to resize the view to match whatever relation to the image you want. */
+@property (nonatomic, strong) void (^onImageSizeKnown)(CGSize size);
+
+/*! @property imageBounds
+ @brief If either `width` or `height` are specified (!= 0.0), `imageBounds` will behave as an alternative to `bounds` in determinining image outer box.
+ Default: {0.0, 0.0} */
+@property (nonatomic, assign) CGSize imageBounds;
+
+/*! @property enableIntrinsicContentSize
+ @brief If `true` and `imageBounds` has at least one value - then intrinsic content size will be automatically calculated.
+ Default: NO */
+@property (nonatomic, assign) BOOL enableIntrinsicContentSize;
+
 /*! Load the image from an URL
     @param url  The URL of the image to load
     @param animationType  The kind of animation to use when displaying the image. */
