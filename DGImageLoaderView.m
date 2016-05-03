@@ -50,6 +50,9 @@
     NSFileHandle *_fileWriteHandle;
     
     UIView *animatingViewToRemove;
+    
+    CGSize _cachedImageSize;
+    CGFloat _cachedImageScale;
 }
 
 @property (nonatomic, strong) NSURLRequest *urlRequest;
@@ -236,6 +239,19 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
     }
 }
 
+- (CGSize)intrinsicContentSize
+{
+    if (_enableIntrinsicContentSize
+        && (!CGSizeEqualToSize(_imageBounds, CGSizeZero)
+        || !CGSizeEqualToSize(self.bounds.size, CGSizeZero))
+        && (!CGSizeEqualToSize(_cachedImageSize, CGSizeZero)))
+    {
+        CGSize neededSize = [self rectForImageSize:_cachedImageSize imageScale:_cachedImageScale allowEnlarge:_enlargeImage flipForSuperview:NO].size;
+        return neededSize;
+    }
+    return CGSizeMake(UIViewNoIntrinsicMetric, UIViewNoIntrinsicMetric);
+}
+
 #pragma mark - Utilities
 
 // These are more accurate than CGAffineTransformMakeRotation, because of rounding errors
@@ -279,7 +295,14 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
 {
     float scale = imageScale / UIScreen.mainScreen.scale;
     BOOL flipSize = [self requiresTransformForImageSize:imageSize];
+    
     CGRect bounds = self.bounds;
+    if (self.imageBounds.width != 0.f ||
+        self.imageBounds.height != 0.f)
+    {
+        bounds.size = self.imageBounds;
+    }
+    
     if (flipSize)
     {
         CGFloat temp = bounds.size.height;
@@ -311,8 +334,8 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
     return bounds;
 }
 
-+ (CGRect)rectForWidth:(CGFloat)cx
-             andHeight:(CGFloat)cy
++ (CGRect)rectForWidth:(CGFloat)w
+             andHeight:(CGFloat)h
                inFrame:(CGRect)parentBox
           allowEnlarge:(BOOL)allowEnlarge
        keepAspectRatio:(BOOL)keepAspectRatio
@@ -320,16 +343,34 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
             cropAnchor:(DGImageLoaderViewCropAnchor)cropAnchor
 {
     CGRect box;
-    if (keepAspectRatio)
+    
+    if (parentBox.size.width == 0.0 || parentBox.size.height == 0.0)
     {
-        if (cx <= parentBox.size.width && cy <= parentBox.size.height && !allowEnlarge)
+        if (parentBox.size.width == 0.0 && parentBox.size.height == 0.0)
         {
-            box.size.width = cx;
-            box.size.height = cy;
+            parentBox.size.width = w;
+            parentBox.size.height = h;
+        }
+        else if (parentBox.size.width == 0.0)
+        {
+            parentBox.size.width = w / h * parentBox.size.height;
         }
         else
         {
-            CGFloat ratio = cy == 0 ? 1 : (cx / cy);
+            parentBox.size.height = h / w * parentBox.size.width;
+        }
+    }
+    
+    if (keepAspectRatio)
+    {
+        if (w <= parentBox.size.width && h <= parentBox.size.height && !allowEnlarge)
+        {
+            box.size.width = w;
+            box.size.height = h;
+        }
+        else
+        {
+            CGFloat ratio = h == 0 ? 1 : (w / h);
             CGFloat newRatio = parentBox.size.height == 0 ? 1 : (parentBox.size.width / parentBox.size.height);
             
             if ((newRatio > ratio && !fitFromOutside) ||
@@ -603,6 +644,24 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
             imageScale = image.scale;
         }
     }
+    
+    imageSize.width *= imageScale / UIScreen.mainScreen.scale;
+    imageSize.height *= imageScale / UIScreen.mainScreen.scale;
+    imageScale = UIScreen.mainScreen.scale;
+    
+    _cachedImageSize = imageSize;
+    _cachedImageScale = imageScale;
+    
+    if (self.onImageSizeKnown)
+    {
+        self.onImageSizeKnown(imageSize);
+    }
+    
+    if (self.enableIntrinsicContentSize)
+    {
+        [self invalidateIntrinsicContentSize];
+    }
+    
     if (imageSize.width <= 0.f || imageSize.height <= 0.f)
     {
         completion(nil, YES);
@@ -725,6 +784,21 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
 - (BOOL)hasImageLoaded
 {
     return _hasImageLoaded;
+}
+
+- (void)setEnableIntrinsicContentSize:(BOOL)enableIntrinsicContentSize
+{
+    if (_enableIntrinsicContentSize != enableIntrinsicContentSize)
+    {
+        _enableIntrinsicContentSize = enableIntrinsicContentSize;
+    }
+    [self invalidateIntrinsicContentSize];
+}
+
+- (void)setImageBounds:(CGSize)imageBounds
+{
+    _imageBounds = imageBounds;
+    [self invalidateIntrinsicContentSize];
 }
 
 #pragma mark - NSURLConnectionDelegate
@@ -937,6 +1011,8 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
     _nextUrlToLoad = nil;
     _waitingForDisplayWithAnimation = NO;
     _waitingForDisplay = NO;
+    _cachedImageSize = CGSizeZero;
+    _cachedImageScale = 0.0;
 }
 
 + (int)removeImageFromCache:(NSURL *)url
@@ -1044,6 +1120,7 @@ static NSMutableArray *s_DGImageLoaderView_activeConnectionsArray = nil;
             self.nextImageView = nil;
         }
             break;
+            
         case DGImageLoaderViewAnimationTypeFade:
         {
             if (animatingViewToRemove)
